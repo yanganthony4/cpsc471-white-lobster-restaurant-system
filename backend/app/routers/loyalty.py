@@ -9,7 +9,6 @@ from app.schemas.loyalty import LoyaltyCreate, LoyaltyResponse, LoyaltyUpdate
 # Create a router object to group all loyalty-related endpoints together
 router = APIRouter()
 
-
 # POST /loyalty/
 # Creates a new loyalty account
 @router.post("/", response_model=LoyaltyResponse)
@@ -80,11 +79,11 @@ def get_loyalty_account(
 @router.put("/{customer_email}", response_model=LoyaltyResponse)
 def update_loyalty_account(
     customer_email: EmailStr,
-    loyalty_update: LoyaltyUpdate,
+    points_balance: int,
     db: Session = Depends(get_db)
 ) -> LoyaltyProgram:
     # Reject invalid point balances before doing any database update
-    if loyalty_update.pointsBalance < 0:
+    if points_balance < 0:
         raise HTTPException(
             status_code=400,
             detail="Points balance cannot be negative"
@@ -105,7 +104,7 @@ def update_loyalty_account(
         )
 
     # Update the points balance with the new value from the request body
-    loyalty_account.pointsBalance = loyalty_update.pointsBalance
+    loyalty_account.pointsBalance = points_balance
 
     # Save the updated value to the database
     db.commit()
@@ -115,3 +114,29 @@ def update_loyalty_account(
 
     # Return the updated loyalty account
     return loyalty_account
+
+# DELETE /loyalty/{customer_email}
+# Deletes loyalty account
+@router.delete("/{customer_email}")
+def delete_loyalty_account(
+    customer_email:EmailStr,
+    db: Session = Depends(get_db)
+) -> dict[str,str]:
+    # Query the database for the loyalty account matching this customer email
+    loyalty_account = (
+        db.query(LoyaltyProgram)
+        .filter(LoyaltyProgram.email == customer_email)
+        .first()
+    )
+
+    # If the loyalty account does not exist, return an HTTP 404 error
+    if loyalty_account is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Loyalty account not found"
+        )
+    
+    db.delete(loyalty_account)
+    db.commit()
+
+    return {"message": "Loyalty Account successfully deleted"}

@@ -1,5 +1,5 @@
 # SQL Alchemy handles turning into correct SQL insert
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, String
 
 from app.database import Base
 
@@ -10,4 +10,4 @@ class CustomerAccount(Base):
     phoneNumber = Column(String(50))
     name = Column(String(100), nullable=False)
     username = Column(String(50), nullable=False, unique=True)
-    passwordHash =a Column(String(255), nullable=False)
+    passwordHash = Column(String(255), nullable=False)
