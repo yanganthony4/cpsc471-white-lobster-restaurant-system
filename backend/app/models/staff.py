@@ -9,5 +9,4 @@ class StaffUser(Base):
     employeeID = Column(Integer, primary_key=True, nullable=False)
     role = Column(String(50), nullable=False)
     name = Column(String(100), nullable=False)
-    username = Column(String(50), nullable=False, unique=True)
     passwordHash = Column(String(255), nullable=False)

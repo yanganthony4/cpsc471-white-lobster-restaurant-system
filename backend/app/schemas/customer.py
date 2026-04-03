@@ -1,26 +1,24 @@
 from pydantic import BaseModel, EmailStr
 
 class CustomerCreate(BaseModel):
-    email:EmailStr
+    email: EmailStr
     phoneNumber: str | None = None
     name: str
-    username: str
     password: str
 
 class CustomerLogin(BaseModel):
-    username: str
+    email: EmailStr
     password: str
 
 class CustomerUpdate(BaseModel):
     email: EmailStr
     name: str
-    username: str
-    phoneNumber: str
+    phoneNumber: str | None = None
+    password: str
 
 class CustomerResponse(BaseModel):
-    email:EmailStr
+    email: EmailStr
     phoneNumber: str | None = None
     name: str
-    username: str
 
     model_config = {"from_attributes": True}

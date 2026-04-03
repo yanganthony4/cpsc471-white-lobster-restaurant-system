@@ -7,7 +7,7 @@ class LoyaltyCreate(BaseModel):
 
 # Determines response of loyalty account
 class LoyaltyResponse(BaseModel):
-    Loyalty_id: int
+    LoyaltyID: int
     email: EmailStr
     pointsBalance: int 
 

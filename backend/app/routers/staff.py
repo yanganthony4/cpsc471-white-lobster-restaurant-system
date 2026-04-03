@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.staff import StaffUser
-from app.schemas.staff import StaffCreate, StaffLogin, StaffResponse
+from app.schemas.staff import StaffCreate, StaffLogin, StaffResponse, StaffUpdate
 from app.security import hash_password, verify_password
 
 # Create a router object to group all staff-related endpoints together
@@ -19,7 +19,7 @@ VALID_STAFF_ROLES = {"Host", "Server", "Manager", "Cashier"}
 def create_staff_account(
     staff_account: StaffCreate,
     db: Session = Depends(get_db)
-) -> StaffUser:
+) -> StaffResponse:
     # Make sure the provided role is valid
     if staff_account.role not in VALID_STAFF_ROLES:
         raise HTTPException(
@@ -27,18 +27,18 @@ def create_staff_account(
             detail="Invalid staff role"
         )
 
-    # Check whether the username already exists
+    # Check whether the employee ID already exists
     existing_staff = (
         db.query(StaffUser)
-        .filter(StaffUser.username == staff_account.username)
+        .filter(StaffUser.employeeID == staff_account.employeeID)
         .first()
     )
 
-    # If a staff account with this username already exists, stop and return an error
+    # If a staff account with this employee ID already exists, stop and return an error
     if existing_staff is not None:
         raise HTTPException(
             status_code=400,
-            detail="Username already exists"
+            detail="Staff account already exists"
         )
 
     # Hash the plain-text password before storing it in the database
@@ -46,9 +46,9 @@ def create_staff_account(
 
     # Create a new StaffUser object using the validated request data
     new_staff = StaffUser(
+        employeeID=staff_account.employeeID,
         role=staff_account.role,
         name=staff_account.name,
-        username=staff_account.username,
         passwordHash=hashed_password
     )
 
@@ -58,8 +58,7 @@ def create_staff_account(
     # Save the new staff row to the database
     db.commit()
 
-    # Refresh the object so it reflects the current database state,
-    # including the auto-generated employeeID
+    # Refresh the object so it reflects the current database state
     db.refresh(new_staff)
 
     # Return the created staff account without exposing the password hash
@@ -67,20 +66,20 @@ def create_staff_account(
 
 
 # POST /staff/login
-# Logs a staff member in by checking username and password
+# Logs a staff member in by checking employee ID and password
 @router.post("/login", response_model=StaffResponse)
 def login_staff(
     login_data: StaffLogin,
     db: Session = Depends(get_db)
 ) -> StaffResponse:
-    # Find the staff account by username
+    # Find the staff account by employee ID
     staff_account = (
         db.query(StaffUser)
-        .filter(StaffUser.username == login_data.username)
+        .filter(StaffUser.employeeID == login_data.employeeID)
         .first()
     )
 
-    # If no staff account matches this username, return a login failure
+    # If no staff account matches this employee ID, return a login failure
     if staff_account is None:
         raise HTTPException(
             status_code=401,
@@ -104,7 +103,7 @@ def login_staff(
 def get_staff_account(
     employee_id: int,
     db: Session = Depends(get_db)
-) -> StaffUser:
+) -> StaffResponse:
     # Query the database for the staff account with this employee ID
     staff_account = (
         db.query(StaffUser)
@@ -120,4 +119,48 @@ def get_staff_account(
         )
 
     # Return the staff account if found
+    return staff_account
+
+
+# PUT /staff/{employee_id}
+# Updates a staff account by employee ID
+@router.put("/{employee_id}", response_model=StaffResponse)
+def update_staff_account(
+    employee_id: int,
+    staff_update: StaffUpdate,
+    db: Session = Depends(get_db)
+) -> StaffResponse:
+    # Find the current staff account using the employee ID
+    staff_account = (
+        db.query(StaffUser)
+        .filter(StaffUser.employeeID == employee_id)
+        .first()
+    )
+
+    # If the staff account does not exist, stop and return an error
+    if staff_account is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Staff account not found"
+        )
+
+    # Make sure the provided role is valid
+    if staff_update.role not in VALID_STAFF_ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid staff role"
+        )
+
+    # Update the staff account fields
+    staff_account.role = staff_update.role
+    staff_account.name = staff_update.name
+    staff_account.passwordHash = hash_password(staff_update.password)
+
+    # Save the updated staff data to the database
+    db.commit()
+
+    # Refresh the object so it reflects the current database state
+    db.refresh(staff_account)
+
+    # Return the updated staff account
     return staff_account
