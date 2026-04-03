@@ -11,6 +11,12 @@ class CustomerLogin(BaseModel):
     username: str
     password: str
 
+class CustomerUpdate(BaseModel):
+    email: EmailStr
+    name: str
+    username: str
+    phoneNumber: str
+
 class CustomerResponse(BaseModel):
     email:EmailStr
     phoneNumber: str | None = None

@@ -4,7 +4,7 @@ from pydantic import EmailStr
 
 from app.database import get_db
 from app.models.loyalty import LoyaltyProgram
-from app.schemas.loyalty import LoyaltyCreate, LoyaltyResponse, LoyaltyUpdate
+from app.schemas.loyalty import LoyaltyCreate, LoyaltyResponse
 
 # Create a router object to group all loyalty-related endpoints together
 router = APIRouter()

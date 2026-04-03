@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models.customer import CustomerAccount
-from app.schemas.customer import CustomerCreate, CustomerResponse, CustomerLogin
+from app.schemas.customer import CustomerCreate, CustomerResponse, CustomerLogin, CustomerUpdate
 from app.security import hash_password, verify_password
 
 # Create a router object to group all customer-related endpoints together
@@ -100,4 +100,84 @@ def login(
         )
 
     # Return the customer account if login is successful
+    return customer_account
+
+@router.get("/by-email/{customer_email}", response_model=CustomerResponse)
+def get_customer_account_by_email(
+    customer_email: str,
+    db: Session = Depends(get_db)
+) -> CustomerResponse:
+    customer_account = (
+        db.query(CustomerAccount)
+        .filter(CustomerAccount.email == customer_email)
+        .first()
+    )
+
+    if customer_account is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Customer account not found"
+        )
+
+    return customer_account
+
+@router.put("/by-email/{customer_email}", response_model=CustomerResponse)
+def update_customer_account_by_email(
+    customer_email: str,
+    customer_update: CustomerUpdate,
+    db: Session = Depends(get_db)
+) -> CustomerResponse:
+    customer_account = (
+        db.query(CustomerAccount)
+        .filter(CustomerAccount.email == customer_email)
+        .first()
+    )
+
+    if customer_account is None:
+        raise HTTPException(
+            status_code=404,
+            detail="Customer account not found"
+        )
+
+    existing_email = (
+        db.query(CustomerAccount)
+        .filter(
+            CustomerAccount.email == customer_update.email,
+            CustomerAccount.email != customer_email
+        )
+        .first()
+    )
+
+    if existing_email is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Email already exists"
+        )
+
+    existing_username = (
+        db.query(CustomerAccount)
+        .filter(
+            CustomerAccount.username == customer_update.username,
+            CustomerAccount.email != customer_email
+        )
+        .first()
+    )
+
+    if existing_username is not None:
+        raise HTTPException(
+            status_code=400,
+            detail="Username already exists"
+        )
+
+    customer_account.email = customer_update.email
+    customer_account.name = customer_update.name
+    customer_account.username = customer_update.username
+    customer_account.phoneNumber = customer_update.phoneNumber
+
+    if customer_update.password is not None:
+        customer_account.passwordHash = hash_password(customer_update.password)
+
+    db.commit()
+    db.refresh(customer_account)
+
     return customer_account

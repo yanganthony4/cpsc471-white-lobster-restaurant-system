@@ -19,7 +19,7 @@ from app.routers import (
     section,
     seating_assignment,
     staff,
-    waitlist,
+    waitlistentry,
 )
 
 # Create the main FastAPI application object
@@ -53,7 +53,7 @@ app.include_router(staff.router, prefix="/staff", tags=["Staff"])
 app.include_router(reservation.router, prefix="/reservation", tags=["Reservations"])
 
 # Register the waitlist router
-app.include_router(waitlist.router, prefix="/waitlist", tags=["Waitlist"])
+app.include_router(waitlistentry.router, prefix="/waitlist", tags=["Waitlist"])
 
 # Register the section router
 app.include_router(section.router, prefix="/sections", tags=["Sections"])
