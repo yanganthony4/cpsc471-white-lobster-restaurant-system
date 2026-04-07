@@ -21,30 +21,30 @@ DROP TABLE IF EXISTS STAFF_USER;
 -- CREATE TABLES
 -- ============================================
 
-CREATE TABLE LOYALTY_PROGRAM (
-    Loyalty_id INT NOT NULL,
-    pointsBalance INT NOT NULL DEFAULT 0,
-
-    PRIMARY KEY (Loyalty_id),
-    CHECK (pointsBalance >= 0)
-);
-
-
 CREATE TABLE CUSTOMER_ACCOUNT (
-    customerID INT AUTO_INCREMENT NOT NULL,
-    email VARCHAR(255) NOT NULL UNIQUE,
-    loyaltyID INT UNIQUE,
+    email VARCHAR(255) NOT NULL,
     phoneNumber VARCHAR(50),
     name VARCHAR(100) NOT NULL,
     username VARCHAR(50) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL, -- will store bcrypt hash
 
-    PRIMARY KEY (customerID),
-    FOREIGN KEY (loyaltyID) REFERENCES LOYALTY_PROGRAM(Loyalty_id)
+    PRIMARY KEY (email),
+    UNIQUE (username)
+);
+
+CREATE TABLE LOYALTY_PROGRAM (
+    Loyalty_id INT NOT NULL AUTO_INCREMENT,
+    email VARCHAR(255) NOT NULL,
+    pointsBalance INT NOT NULL DEFAULT 0,
+
+    PRIMARY KEY (Loyalty_id),
+    UNIQUE (email),
+    FOREIGN KEY (email) REFERENCES CUSTOMER_ACCOUNT(email),
+    CHECK (pointsBalance >= 0)
 );
 
 CREATE TABLE STAFF_USER (
-    employeeID INT NOT NULL,
+    employeeID INT NOT NULL AUTO_INCREMENT,
     role VARCHAR(50) NOT NULL,
     name VARCHAR(100) NOT NULL,
     username VARCHAR(50) NOT NULL,
@@ -83,14 +83,13 @@ CREATE TABLE RESTAURANT_TABLE (
 
 
 CREATE TABLE WAITLIST_ENTRY (
-    waitlistID INT AUTO_INCREMENT NOT NULL,
-    customerID INT NOT NULL,
+    waitlistID INT NOT NULL AUTO_INCREMENT,
     email VARCHAR(255) NOT NULL,
     specialRequests VARCHAR(255),
-    joinTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    joinTime TIME NOT NULL DEFAULT CURRENT_TIME,
     entryStatus VARCHAR(50) NOT NULL DEFAULT 'Waiting',
     partySize INT NOT NULL,
-    estimatedWaitTime INT DEFAULT 0,
+    estimatedWaitTime INT DEFAULT 10,
 
     PRIMARY KEY (waitlistID),
     FOREIGN KEY (customerID) REFERENCES CUSTOMER_ACCOUNT(customerID) -- fk
@@ -103,13 +102,11 @@ CREATE TABLE WAITLIST_ENTRY (
 
 
 CREATE TABLE RESERVATION (
-    reservationID INT AUTO_INCREMENT NOT NULL,
-    customerID INT NOT NULL,
+    reservationID INT NOT NULL AUTO_INCREMENT,
+    email VARCHAR(255) NOT NULL,
     specialRequests VARCHAR(255),
     partySize INT NOT NULL,
-    reservationTime TIME NOT NULL,
-    scheduledDateTime TIMESTAMP NOT NULL,
-    status VARCHAR(50) NOT NULL DEFAULT 'Pending', -- state tracking
+    reservationDateTime TIMESTAMP NOT NULL,
 
     PRIMARY KEY (reservationID),
     FOREIGN KEY (customerID) REFERENCES CUSTOMER_ACCOUNT(customerID)
@@ -120,7 +117,7 @@ CREATE TABLE RESERVATION (
 
 
 CREATE TABLE SEATING_ASSIGNMENT (
-    assignmentID INT NOT NULL,
+    assignmentID INT NOT NULL AUTO_INCREMENT,
     reservationID INT,
     waitlistID INT,
     sectionName VARCHAR(100) NOT NULL,
@@ -151,7 +148,7 @@ CREATE TABLE SEATING_ASSIGNMENT (
 );
 
 CREATE TABLE PROMOTION (
-    promoID INT NOT NULL,
+    promoID INT NOT NULL AUTO_INCREMENT,
     startDate DATE NOT NULL,
     endDate DATE NOT NULL,
     discountAmount DECIMAL(10,2) NOT NULL,
@@ -164,7 +161,7 @@ CREATE TABLE PROMOTION (
 
 
 CREATE TABLE MENU_ITEM (
-    menuItemID INT NOT NULL,
+    menuItemID INT NOT NULL AUTO_INCREMENT,
     description VARCHAR(255),
     currentPrice DECIMAL(10,2) NOT NULL,
     name VARCHAR(100) NOT NULL,
@@ -175,7 +172,7 @@ CREATE TABLE MENU_ITEM (
 
 
 CREATE TABLE BILL (
-    invoiceID INT NOT NULL,
+    invoiceID INT NOT NULL AUTO_INCREMENT,
     promoID INT,
     assignmentID INT NOT NULL,
     totalAmount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
@@ -220,7 +217,7 @@ CREATE TABLE BILL_ITEM (
 
 
 CREATE TABLE PAYMENT (
-    paymentID INT AUTO_INCREMENT NOT NULL,
+    paymentID INT NOT NULL AUTO_INCREMENT,
     invoiceID INT NOT NULL,
     paymentMethod VARCHAR(50) NOT NULL,
     timeStamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
