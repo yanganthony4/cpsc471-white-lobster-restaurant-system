@@ -31,16 +31,15 @@ CREATE TABLE LOYALTY_PROGRAM (
 
 
 CREATE TABLE CUSTOMER_ACCOUNT (
-    email VARCHAR(255) NOT NULL,
-    loyaltyID INT,
+    customerID INT AUTO_INCREMENT NOT NULL,
+    email VARCHAR(255) NOT NULL UNIQUE,
+    loyaltyID INT UNIQUE,
     phoneNumber VARCHAR(50),
     name VARCHAR(100) NOT NULL,
-    username VARCHAR(50) NOT NULL,
-    password VARCHAR(255) NOT NULL,
+    username VARCHAR(50) NOT NULL UNIQUE,
+    password VARCHAR(255) NOT NULL, -- will store bcrypt hash
 
-    PRIMARY KEY (email),
-    UNIQUE (loyaltyID),
-    UNIQUE (username),
+    PRIMARY KEY (customerID),
     FOREIGN KEY (loyaltyID) REFERENCES LOYALTY_PROGRAM(Loyalty_id)
 );
 
@@ -84,7 +83,8 @@ CREATE TABLE RESTAURANT_TABLE (
 
 
 CREATE TABLE WAITLIST_ENTRY (
-    waitlistID INT NOT NULL,
+    waitlistID INT AUTO_INCREMENT NOT NULL,
+    customerID INT NOT NULL,
     email VARCHAR(255) NOT NULL,
     specialRequests VARCHAR(255),
     joinTime TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -93,7 +93,7 @@ CREATE TABLE WAITLIST_ENTRY (
     estimatedWaitTime INT DEFAULT 0,
 
     PRIMARY KEY (waitlistID),
-    FOREIGN KEY (email) REFERENCES CUSTOMER_ACCOUNT(email)
+    FOREIGN KEY (customerID) REFERENCES CUSTOMER_ACCOUNT(customerID) -- fk
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
     CHECK (partySize > 0),
@@ -103,18 +103,19 @@ CREATE TABLE WAITLIST_ENTRY (
 
 
 CREATE TABLE RESERVATION (
-    reservationID INT NOT NULL,
-    email VARCHAR(255) NOT NULL,
+    reservationID INT AUTO_INCREMENT NOT NULL,
+    customerID INT NOT NULL,
     specialRequests VARCHAR(255),
     partySize INT NOT NULL,
     reservationTime TIME NOT NULL,
     scheduledDateTime TIMESTAMP NOT NULL,
+    status VARCHAR(50) NOT NULL DEFAULT 'Pending', -- state tracking
 
     PRIMARY KEY (reservationID),
-    FOREIGN KEY (email) REFERENCES CUSTOMER_ACCOUNT(email)
-        ON DELETE RESTRICT
-        ON UPDATE CASCADE,
-    CHECK (partySize > 0)
+    FOREIGN KEY (customerID) REFERENCES CUSTOMER_ACCOUNT(customerID)
+        ON DELETE RESTRICT ON UPDATE CASCADE,
+    CHECK (partySize > 0),
+    CHECK (status IN ('Pending', 'Confirmed', 'Seated', 'Cancelled', 'No-Show'))
 );
 
 
@@ -219,18 +220,48 @@ CREATE TABLE BILL_ITEM (
 
 
 CREATE TABLE PAYMENT (
-    paymentID INT NOT NULL,
+    paymentID INT AUTO_INCREMENT NOT NULL,
     invoiceID INT NOT NULL,
     paymentMethod VARCHAR(50) NOT NULL,
     timeStamp TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     amount DECIMAL(10,2) NOT NULL,
+    idempotencyKey VARCHAR(255) UNIQUE NOT NULL, -- NEW: Prevents double charges
 
     PRIMARY KEY (paymentID),
-
     FOREIGN KEY (invoiceID) REFERENCES BILL(invoiceID)
-        ON DELETE RESTRICT
-        ON UPDATE CASCADE,
-
-    CHECK (amount > 0),
-    CHECK (paymentMethod IN ('Cash', 'Debit', 'Credit', 'Gift Card', 'Online'))
+        ON DELETE RESTRICT ON UPDATE CASCADE
 );
+
+-- ============================================
+-- Indexes
+-- ============================================
+
+CREATE INDEX idx_reservation_date ON RESERVATION(scheduledDateTime, status);
+CREATE INDEX idx_waitlist_time ON WAITLIST_ENTRY(joinTime, entryStatus);
+
+DELIMITER //
+CREATE TRIGGER chk_capacity_before_insert_seating
+BEFORE INSERT ON SEATING_ASSIGNMENT
+FOR EACH ROW
+BEGIN
+    DECLARE table_cap INT;
+    DECLARE party_sz INT;
+
+    -- Get capacity
+    SELECT capacity INTO table_cap FROM RESTAURANT_TABLE 
+    WHERE tableNumber = NEW.tableNumber AND sectionName = NEW.sectionName;
+
+    -- Get party size based on intent
+    IF NEW.reservationID IS NOT NULL THEN
+        SELECT partySize INTO party_sz FROM RESERVATION WHERE reservationID = NEW.reservationID;
+    ELSE
+        SELECT partySize INTO party_sz FROM WAITLIST_ENTRY WHERE waitlistID = NEW.waitlistID;
+    END IF;
+
+    IF party_sz > table_cap THEN
+        SIGNAL SQLSTATE '45000' 
+        SET MESSAGE_TEXT = 'Party size exceeds table capacity.';
+    END IF;
+END;
+//
+DELIMITER ;
