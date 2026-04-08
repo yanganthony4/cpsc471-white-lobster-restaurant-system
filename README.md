@@ -18,3 +18,8 @@ restaurant-system/
 ├── docs/
 ├── .gitignore
 └── README.md
+
+## Install/Run
+cd frontend
+npm install
+npm run dev
