@@ -7,6 +7,6 @@ from app.database import Base
 class LoyaltyProgram(Base):
     __tablename__ = "LOYALTY_PROGRAM"
 
-    Loyalty_id = Column(Integer, primary_key=True, nullable=False)
+    LoyaltyID = Column(Integer, primary_key=True, nullable=False)
     email = Column(String(255), ForeignKey("CUSTOMER_ACCOUNT.email"), unique=True, nullable=False)
     pointsBalance = Column(Integer, nullable=False)
