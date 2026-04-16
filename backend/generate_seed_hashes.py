@@ -11,7 +11,7 @@ Then paste the printed UPDATE statements into MySQL, or run them directly:
     python generate_seed_hashes.py | mysql -u root -p wl_restaurant_system
 """
 
-from pwdlib import PasswordHash
+from pwdlib import PasswordHash # cd backend -> pip install "pwdlib[argon2]"
 
 ph = PasswordHash.recommended()
 
