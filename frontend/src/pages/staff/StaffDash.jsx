@@ -1,19 +1,21 @@
+import { Link } from 'react-router-dom'  // FIX: was <a href> causing full-page reloads
 import { useAuth } from '../../context/AuthContext'
 
 export default function StaffDash() {
   const { user } = useAuth()
-  const greeting = new Date().getHours() < 12 ? 'Good morning' : new Date().getHours() < 17 ? 'Good afternoon' : 'Good evening'
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
 
   const quickLinks = {
-    Host:    [
-      { label: 'Manage tables',      to: '/staff/tables' },
-      { label: 'View reservations',  to: '/staff/reservations' },
-      { label: 'View waitlist',      to: '/staff/waitlist' },
-      { label: 'Create seating',     to: '/staff/seating' },
+    Host: [
+      { label: 'Manage tables',     to: '/staff/tables' },
+      { label: 'View reservations', to: '/staff/reservations' },
+      { label: 'View waitlist',     to: '/staff/waitlist' },
+      { label: 'Create seating',    to: '/staff/seating' },
     ],
-    Server:  [
-      { label: 'My seating',  to: '/staff/seating' },
-      { label: 'View bills',  to: '/staff/bills' },
+    Server: [
+      { label: 'My seating', to: '/staff/seating' },
+      { label: 'View bills', to: '/staff/bills' },
     ],
     Cashier: [
       { label: 'Process bills', to: '/staff/bills' },
@@ -45,9 +47,11 @@ export default function StaffDash() {
         </div>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
           {links.map(l => (
-            <a key={l.to} href={l.to} className="btn btn-secondary">
+            // FIX: was <a href={l.to}> which causes full-page reload on every click.
+            // React Router's <Link> keeps navigation in the SPA without reloading.
+            <Link key={l.to} to={l.to} className="btn btn-secondary">
               {l.label} →
-            </a>
+            </Link>
           ))}
         </div>
       </div>

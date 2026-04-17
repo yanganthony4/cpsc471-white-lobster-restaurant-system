@@ -27,9 +27,15 @@ export default function CustomerDash() {
 
   if (loading) return <div className="loading-center"><span className="spinner" /></div>
 
+  // FIX: safe date formatter — if dt is null/undefined/invalid don't crash
   const fmt = (dt) => {
+    if (!dt) return '—'
     const d = new Date(dt)
-    return d.toLocaleDateString('en-CA', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    if (isNaN(d.getTime())) return String(dt)
+    return d.toLocaleDateString('en-CA', {
+      weekday: 'short', month: 'short', day: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    })
   }
 
   return (
