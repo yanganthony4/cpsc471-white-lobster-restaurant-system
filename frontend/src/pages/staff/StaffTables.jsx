@@ -1,6 +1,6 @@
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Modal from '../../components/Modal'
-import { getTable, createTable, updateTable, deleteTable } from '../../lib/api'
+import { listTables, getTable, createTable, updateTable, deleteTable } from '../../lib/api'
 
 const STATUSES = ['Available', 'Occupied', 'Reserved', 'Out of Service']
 const STATUS_CLASS = { Available: 'badge-green', Occupied: 'badge-red', Reserved: 'badge-amber', 'Out of Service': 'badge-gray' }

@@ -39,9 +39,21 @@ export default function StaffBills() {
   const setP = (k) => (e) => setPayForm(f => ({ ...f, [k]: e.target.value }))
 
   const handleLookup = async (e) => {
-    e.preventDefault(); setError(''); setSuccess(''); setLoading(true); setBill(null)
-    try { setBill(await getBill(parseInt(lookupId))) } catch (err) { setError(err.message) } finally { setLoading(false) }
-  }
+  e.preventDefault(); setError(''); setSuccess(''); setLoading(true); setBill(null)
+  setBillItems([]); setBillPayments([])
+  try {
+    const b = await getBill(parseInt(lookupId))
+    setBill(b)
+    // FIX: also load items and payments
+    const [items, pays] = await Promise.allSettled([
+      listBillItems(b.invoiceID),
+      listPayments(b.invoiceID),
+    ])
+    if (items.status === 'fulfilled') setBillItems(items.value)
+    if (pays.status  === 'fulfilled') setBillPayments(pays.value)
+  } catch (err) { setError(err.message) }
+  finally { setLoading(false) }
+}
 
   const handleCreate = async (e) => {
     e.preventDefault(); setModalError(''); setSaving(true)
@@ -98,6 +110,19 @@ export default function StaffBills() {
       setSuccess('Payment recorded.')
     } catch (err) { setModalError(err.message) } finally { setSaving(false) }
   }
+
+  const reloadBillDetails = async () => {
+  if (!bill) return
+  const [items, pays] = await Promise.allSettled([
+    listBillItems(bill.invoiceID),
+    listPayments(bill.invoiceID),
+  ])
+  if (items.status === 'fulfilled') setBillItems(items.value)
+  if (pays.status  === 'fulfilled') setBillPayments(pays.value)
+  // Also refresh the bill itself (to pick up isSettled changes)
+  const b = await getBill(bill.invoiceID)
+  setBill(b)
+}
 
   const handleSettle = async () => {
     setSaving(true)

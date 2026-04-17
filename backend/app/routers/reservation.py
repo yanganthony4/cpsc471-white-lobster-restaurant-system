@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import EmailStr
-from datetime import datetime, timezone
+from datetime import datetime
+from typing import List
 
 from app.database import get_db
 from app.models.reservation import Reservation
@@ -10,109 +10,65 @@ from app.schemas.reservation import ReservationCreate, ReservationResponse, Rese
 router = APIRouter()
 
 
-def _to_utc(dt: datetime) -> datetime:
-    #FIX: Timezone-strip bug.
-   
+def _strip_tz(dt: datetime) -> datetime:
     if dt.tzinfo is not None:
         return dt.replace(tzinfo=None)
     return dt
 
 
-router = APIRouter()
+# GET /reservation/  — LIST ALL (staff use)
+@router.get("/", response_model=List[ReservationResponse])
+def list_reservations(db: Session = Depends(get_db)):
+    return db.query(Reservation).order_by(Reservation.reservationID).all()
 
 
 # POST /reservation/
 @router.post("/", response_model=ReservationResponse)
-def create_reservation(
-    reservation: ReservationCreate,
-    db: Session = Depends(get_db),
-) -> Reservation:
-    if _to_utc(reservation.reservationDateTime) <= datetime.utcnow():
-        raise HTTPException(status_code=400, detail="Reservation date and time must be in the future")
-
-    if reservation.partySize <= 0:
-        raise HTTPException(status_code=400, detail="Party size must be greater than 0")
-
-    existing = (
-        db.query(Reservation)
-        .filter(Reservation.email == reservation.email)
-        .first()
-    )
-    if existing is not None:
-        raise HTTPException(status_code=400, detail="Each customer is only allowed one reservation at a time")
-
-    new_reservation = Reservation(
+def create_reservation(reservation: ReservationCreate, db: Session = Depends(get_db)):
+    if _strip_tz(reservation.reservationDateTime) <= datetime.utcnow():
+        raise HTTPException(400, detail="Reservation date and time must be in the future")
+    existing = db.query(Reservation).filter(Reservation.email == reservation.email).first()
+    if existing:
+        raise HTTPException(400, detail="Each customer is only allowed one reservation at a time")
+    obj = Reservation(
         email=reservation.email,
         specialRequests=reservation.specialRequests,
         partySize=reservation.partySize,
-        reservationDateTime=_to_utc(reservation.reservationDateTime),
+        reservationDateTime=_strip_tz(reservation.reservationDateTime),
     )
-    db.add(new_reservation)
-    db.commit()
-    db.refresh(new_reservation)
-    return new_reservation
+    db.add(obj); db.commit(); db.refresh(obj)
+    return obj
 
 
 # GET /reservation/{customer_email}
 @router.get("/{customer_email}", response_model=ReservationResponse)
-def get_reservation(
-    customer_email: EmailStr,
-    db: Session = Depends(get_db),
-) -> Reservation:
-    reservation = (
-        db.query(Reservation)
-        .filter(Reservation.email == customer_email)
-        .first()
-    )
-    if reservation is None:
-        raise HTTPException(status_code=404, detail="Reservation not found")
-    return reservation
+def get_reservation(customer_email: str, db: Session = Depends(get_db)):
+    r = db.query(Reservation).filter(Reservation.email == customer_email).first()
+    if not r:
+        raise HTTPException(404, detail="Reservation not found")
+    return r
 
 
 # PUT /reservation/{customer_email}
 @router.put("/{customer_email}", response_model=ReservationResponse)
-def update_reservation(
-    customer_email: EmailStr,
-    update: ReservationUpdate,
-    db: Session = Depends(get_db),
-) -> Reservation:
-    if _to_utc(update.reservationDateTime) <= datetime.utcnow():
-        raise HTTPException(status_code=400, detail="Reservation date and time must be in the future")
-
-    if update.partySize <= 0:
-        raise HTTPException(status_code=400, detail="Party size must be greater than 0")
-
-    reservation = (
-        db.query(Reservation)
-        .filter(Reservation.email == customer_email)
-        .first()
-    )
-    if reservation is None:
-        raise HTTPException(status_code=404, detail="Reservation not found")
-
-    reservation.specialRequests     = update.specialRequests
-    reservation.partySize           = update.partySize
-    reservation.reservationDateTime = _to_utc(update.reservationDateTime)
-
-    db.commit()
-    db.refresh(reservation)
-    return reservation
+def update_reservation(customer_email: str, update: ReservationUpdate, db: Session = Depends(get_db)):
+    if _strip_tz(update.reservationDateTime) <= datetime.utcnow():
+        raise HTTPException(400, detail="Reservation date and time must be in the future")
+    r = db.query(Reservation).filter(Reservation.email == customer_email).first()
+    if not r:
+        raise HTTPException(404, detail="Reservation not found")
+    r.specialRequests = update.specialRequests
+    r.partySize = update.partySize
+    r.reservationDateTime = _strip_tz(update.reservationDateTime)
+    db.commit(); db.refresh(r)
+    return r
 
 
 # DELETE /reservation/{customer_email}
 @router.delete("/{customer_email}")
-def delete_reservation(
-    customer_email: EmailStr,
-    db: Session = Depends(get_db),
-) -> dict[str, str]:
-    reservation = (
-        db.query(Reservation)
-        .filter(Reservation.email == customer_email)
-        .first()
-    )
-    if reservation is None:
-        raise HTTPException(status_code=404, detail="Reservation not found")
-
-    db.delete(reservation)
-    db.commit()
+def delete_reservation(customer_email: str, db: Session = Depends(get_db)):
+    r = db.query(Reservation).filter(Reservation.email == customer_email).first()
+    if not r:
+        raise HTTPException(404, detail="Reservation not found")
+    db.delete(r); db.commit()
     return {"message": "Reservation successfully deleted"}

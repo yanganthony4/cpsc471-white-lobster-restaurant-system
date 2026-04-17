@@ -58,9 +58,8 @@ export const updateStaff = (id, data) => put(`/staff/${id}`, data);
 // ── Loyalty ───────────────────────────────────────────────────────────────────
 export const getLoyalty    = (email)        => get(`/loyalty/${encodeURIComponent(email)}`);
 export const createLoyalty = (data)         => post('/loyalty/', data);
-// FIX: points_balance passed as query param — FastAPI reads it from URL
 export const updateLoyalty = (email, points) =>
-  put(`/loyalty/${encodeURIComponent(email)}?points_balance=${points}`);
+  put(`/loyalty/${encodeURIComponent(email)}`, { pointsBalance: points });
 export const deleteLoyalty = (email) => del(`/loyalty/${encodeURIComponent(email)}`);
 
 // ── Reservations ──────────────────────────────────────────────────────────────
@@ -123,3 +122,14 @@ export const getPayment    = (id)        => get(`/payments/${id}`);
 export const createPayment = (data)      => post('/payments/', data);
 export const updatePayment = (id, data)  => put(`/payments/${id}`, data);
 export const deletePayment = (id)        => del(`/payments/${id}`);
+
+// ── List endpoints (new) ──────────────────────────────────────────────────────
+export const listReservations   = ()         => get('/reservation/');
+export const listWaitlist       = (status)   => get(`/waitlist/${status ? '?status=' + encodeURIComponent(status) : ''}`);
+export const listTables         = (section)  => get(`/tables/${section ? '?section=' + encodeURIComponent(section) : ''}`);
+export const listSections       = ()         => get('/sections/');
+export const listMenuItems      = ()         => get('/menu-items/');
+export const listBillItems      = (invoiceId) => get(`/bill-items/by-invoice/${invoiceId}`);
+export const listPayments       = (invoiceId) => get(`/payments/by-invoice/${invoiceId}`);
+export const listAssignments    = ()          => get('/seating-assignments/');
+export const updateWaitlistStatus = (id, status) => req('PATCH', `/waitlist/${id}/status`, { entryStatus: status });

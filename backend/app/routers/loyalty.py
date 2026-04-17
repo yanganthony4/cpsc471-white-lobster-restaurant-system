@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import EmailStr
+from pydantic import EmailStr, BaseModel, Field
 
 from app.database import get_db
 from app.models.loyalty import LoyaltyProgram
@@ -8,6 +8,8 @@ from app.schemas.loyalty import LoyaltyCreate, LoyaltyResponse
 
 router = APIRouter()
 
+class LoyaltyUpdate(BaseModel):
+    pointsBalance: int = Field(ge=0)
 
 # POST /loyalty/
 @router.post("/", response_model=LoyaltyResponse)
@@ -50,25 +52,21 @@ def get_loyalty_account(
     return account
 
 
-# Added explicit type annotation so FastAPI doesn't reject it as a missing body.
 @router.put("/{customer_email}", response_model=LoyaltyResponse)
 def update_loyalty_account(
-    customer_email: EmailStr,
-    points_balance: int,
+    customer_email: str,
+    update: LoyaltyUpdate,
     db: Session = Depends(get_db),
-) -> LoyaltyProgram:
-    if points_balance < 0:
-        raise HTTPException(status_code=400, detail="Points balance cannot be negative")
-
+):
     account = (
         db.query(LoyaltyProgram)
         .filter(LoyaltyProgram.email == customer_email)
         .first()
     )
-    if account is None:
-        raise HTTPException(status_code=404, detail="Loyalty account not found")
+    if not account:
+        raise HTTPException(404, detail="Loyalty account not found")
 
-    account.pointsBalance = points_balance
+    account.pointsBalance = update.pointsBalance
     db.commit()
     db.refresh(account)
     return account
