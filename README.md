@@ -26,7 +26,7 @@ mysql -u root -p wl_restaurant_system < database/seed/seed_database.sql
 
 cd backend
 pip install -r requirements.txt
-python generate_seed_hashes.py | mysql -u root -p wl_restaurant_system
+python3 generate_seed_hashes.py | mysql -u root -p wl_restaurant_system
 # Customer password: password123
 # Staff password: staffpass1
 
