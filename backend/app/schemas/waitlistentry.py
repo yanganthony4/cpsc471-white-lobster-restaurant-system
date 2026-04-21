@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
-from datetime import time
+from datetime import datetime
 
 class WaitlistEntryCreate(BaseModel):
     email: EmailStr
@@ -10,13 +10,15 @@ class WaitlistEntryUpdate(BaseModel):
     specialRequests: str | None = None
     partySize: int = Field(gt=0)
 
+class WaitlistStatusUpdate(BaseModel):
+    entryStatus: str
+
 class WaitlistResponse(BaseModel):
-    waitlistID: int 
+    waitlistID: int
     email: EmailStr
     specialRequests: str | None = None
     entryStatus: str
-    joinTime: time
-    partySize: int 
+    joinTime: datetime
+    partySize: int
     estimatedWaitTime: int
-
     model_config = {"from_attributes": True}

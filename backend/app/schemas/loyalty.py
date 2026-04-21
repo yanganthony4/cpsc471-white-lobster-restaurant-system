@@ -1,15 +1,16 @@
 from pydantic import BaseModel, EmailStr, Field
 
-# Determines the format creating loyalty account
 class LoyaltyCreate(BaseModel):
     email: EmailStr
-    pointsBalance: int = Field(gt=0)
+    # Was Field(gt=0) which means strictly > 0.
+    # Changed to ge=0 (greater-than-or-equal) to allow 0-point enrollment.
+    pointsBalance: int = Field(ge=0, default=0)
 
-# Determines response of loyalty account
+
 class LoyaltyResponse(BaseModel):
+    # Field name matches the SQLAlchemy attribute (LoyaltyID), not the DB column
     LoyaltyID: int
     email: EmailStr
     pointsBalance: int 
 
     model_config = {"from_attributes": True}
-

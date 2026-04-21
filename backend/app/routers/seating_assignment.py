@@ -1,189 +1,242 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
+from typing import List
 
 from app.database import get_db
 from app.models.seating_assignment import SeatingAssignment
+from app.models.restaurant_table import RestaurantTable
+from app.models.reservation import Reservation
+from app.models.waitlistentry import WaitlistEntry
 from app.schemas.seating_assignment import (
     SeatingAssignmentCreate,
     SeatingAssignmentUpdate,
     SeatingAssignmentResponse,
 )
 
-# Create a router object to group all seating assignment endpoints together
 router = APIRouter()
 
-# Allowed status values for seating assignments
 VALID_ASSIGNMENT_STATUSES = {"Seated", "Completed", "Cancelled"}
 
 
+# GET /seating-assignments/
+@router.get("/", response_model=List[SeatingAssignmentResponse])
+def list_seating_assignments(db: Session = Depends(get_db)):
+    return db.query(SeatingAssignment).order_by(SeatingAssignment.assignmentID).all()
+
+
 # POST /seating-assignments/
-# Creates a new seating assignment
 @router.post("/", response_model=SeatingAssignmentResponse)
 def create_seating_assignment(
     assignment: SeatingAssignmentCreate,
-    db: Session = Depends(get_db)
-) -> SeatingAssignment:
-    # Validate the current status value
+    db: Session = Depends(get_db),
+):
+    # Validate status 
     if assignment.currentStatus not in VALID_ASSIGNMENT_STATUSES:
         raise HTTPException(
             status_code=400,
-            detail="Invalid seating assignment status"
+            detail=(
+                f"Invalid status '{assignment.currentStatus}'. "
+                f"Allowed values: {sorted(VALID_ASSIGNMENT_STATUSES)}"
+            ),
         )
 
-    # Enforce the same XOR rule as the database:
-    # exactly one of reservationID or waitlistID must be provided
-    if (assignment.reservationID is None and assignment.waitlistID is None) or (
-        assignment.reservationID is not None and assignment.waitlistID is not None
-    ):
+    # XOR constraint
+    has_reservation = assignment.reservationID is not None
+    has_waitlist    = assignment.waitlistID    is not None
+
+    if has_reservation and has_waitlist:
         raise HTTPException(
             status_code=400,
-            detail="Exactly one of reservationID or waitlistID must be provided"
+            detail="Provide reservationID OR waitlistID — not both.",
+        )
+    if not has_reservation and not has_waitlist:
+        raise HTTPException(
+            status_code=400,
+            detail="Exactly one of reservationID or waitlistID must be provided.",
         )
 
-    # If a reservationID is provided, make sure it is not already assigned
-    if assignment.reservationID is not None:
-        existing_reservation_assignment = (
-            db.query(SeatingAssignment)
-            .filter(SeatingAssignment.reservationID == assignment.reservationID)
-            .first()
-        )
-
-        if existing_reservation_assignment is not None:
+    # Duplicate-assignment guard 
+    if has_reservation:
+        if db.query(SeatingAssignment).filter(
+            SeatingAssignment.reservationID == assignment.reservationID
+        ).first():
             raise HTTPException(
                 status_code=400,
-                detail="This reservation already has a seating assignment"
+                detail=f"Reservation {assignment.reservationID} already has a seating assignment.",
             )
 
-    # If a waitlistID is provided, make sure it is not already assigned
-    if assignment.waitlistID is not None:
-        existing_waitlist_assignment = (
-            db.query(SeatingAssignment)
-            .filter(SeatingAssignment.waitlistID == assignment.waitlistID)
-            .first()
-        )
-
-        if existing_waitlist_assignment is not None:
+    if has_waitlist:
+        if db.query(SeatingAssignment).filter(
+            SeatingAssignment.waitlistID == assignment.waitlistID
+        ).first():
             raise HTTPException(
                 status_code=400,
-                detail="This waitlist entry already has a seating assignment"
+                detail=f"Waitlist entry {assignment.waitlistID} already has a seating assignment.",
             )
 
-    # Create a new SeatingAssignment object from the validated request data
-    new_assignment = SeatingAssignment(
-        reservationID=assignment.reservationID,
-        waitlistID=assignment.waitlistID,
-        sectionName=assignment.sectionName,
-        tableNumber=assignment.tableNumber,
-        employeeID=assignment.employeeID,
-        currentStatus=assignment.currentStatus
+    # Reservation existence 
+    if has_reservation:
+        if not db.query(Reservation).filter(
+            Reservation.reservationID == assignment.reservationID
+        ).first():
+            raise HTTPException(
+                status_code=404,
+                detail=f"Reservation {assignment.reservationID} not found.",
+            )
+
+    # Waitlist entry existence + status)
+    wl_entry = None
+    if has_waitlist:
+        wl_entry = (
+            db.query(WaitlistEntry)
+            .filter(WaitlistEntry.waitlistID == assignment.waitlistID)
+            .with_for_update()
+            .first()
+        )
+        if wl_entry is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Waitlist entry {assignment.waitlistID} not found.",
+            )
+        if wl_entry.entryStatus != "Waiting":
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    f"Waitlist entry {assignment.waitlistID} cannot be seated — "
+                    f"current status is '{wl_entry.entryStatus}' (must be 'Waiting')."
+                ),
+            )
+
+    # Table existence (with row lock) 
+    table = (
+        db.query(RestaurantTable)
+        .filter(
+            RestaurantTable.tableNumber == assignment.tableNumber,
+            RestaurantTable.sectionName == assignment.sectionName,
+        )
+        .with_for_update()
+        .first()
     )
+    if table is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                f"Table {assignment.tableNumber} in section "
+                f"'{assignment.sectionName}' does not exist."
+            ),
+        )
 
-    # Add the new seating assignment to the database session
-    db.add(new_assignment)
+    # Table availability
+    if table.availabilityStatus != "Available":
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Table {assignment.tableNumber} in '{assignment.sectionName}' "
+                f"is not available — current status is '{table.availabilityStatus}'. "
+                f"Only tables with status 'Available' can be assigned."
+            ),
+        )
 
-    # Save the new row to the database
-    db.commit()
+    # Commit the transaction
+    try:
+        new_assignment = SeatingAssignment(
+            reservationID=assignment.reservationID,
+            waitlistID=assignment.waitlistID,
+            sectionName=assignment.sectionName,
+            tableNumber=assignment.tableNumber,
+            employeeID=assignment.employeeID,
+            currentStatus=assignment.currentStatus,
+        )
+        db.add(new_assignment)
 
-    # Refresh the object so it reflects the current database state
-    db.refresh(new_assignment)
+        # Mark table occupied
+        table.availabilityStatus = "Occupied"
 
-    # Return the created seating assignment
-    return new_assignment
+        # Mark waitlist entry seated
+        if wl_entry is not None:
+            wl_entry.entryStatus = "Seated"
+
+        db.commit()
+        db.refresh(new_assignment)
+        return new_assignment
+
+    except IntegrityError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail=f"Database integrity error: {exc.orig}",
+        )
 
 
 # GET /seating-assignments/{assignment_id}
-# Retrieves one seating assignment by assignment ID
 @router.get("/{assignment_id}", response_model=SeatingAssignmentResponse)
-def get_seating_assignment(
-    assignment_id: int,
-    db: Session = Depends(get_db)
-) -> SeatingAssignment:
-    # Find the seating assignment by its primary key
-    assignment = (
+def get_seating_assignment(assignment_id: int, db: Session = Depends(get_db)):
+    obj = (
         db.query(SeatingAssignment)
         .filter(SeatingAssignment.assignmentID == assignment_id)
         .first()
     )
-
-    # If it does not exist, return an HTTP 404 error
-    if assignment is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Seating assignment not found"
-        )
-
-    # Return the assignment if found
-    return assignment
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Seating assignment not found.")
+    return obj
 
 
 # PUT /seating-assignments/{assignment_id}
-# Updates the current status of a seating assignment
+# Completed or Cancelled frees the table back to Available
 @router.put("/{assignment_id}", response_model=SeatingAssignmentResponse)
 def update_seating_assignment(
     assignment_id: int,
     update: SeatingAssignmentUpdate,
-    db: Session = Depends(get_db)
-) -> SeatingAssignment:
-    # Validate the updated status value
+    db: Session = Depends(get_db),
+):
     if update.currentStatus not in VALID_ASSIGNMENT_STATUSES:
         raise HTTPException(
             status_code=400,
-            detail="Invalid seating assignment status"
+            detail=(
+                f"Invalid status '{update.currentStatus}'. "
+                f"Allowed values: {sorted(VALID_ASSIGNMENT_STATUSES)}"
+            ),
         )
 
-    # Find the seating assignment by ID
-    assignment = (
+    obj = (
         db.query(SeatingAssignment)
         .filter(SeatingAssignment.assignmentID == assignment_id)
         .first()
     )
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Seating assignment not found.")
 
-    # If it does not exist, return an HTTP 404 error
-    if assignment is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Seating assignment not found"
+    old_status = obj.currentStatus
+    obj.currentStatus = update.currentStatus
+
+    if update.currentStatus in ("Completed", "Cancelled") and old_status == "Seated":
+        table = (
+            db.query(RestaurantTable)
+            .filter(
+                RestaurantTable.tableNumber == obj.tableNumber,
+                RestaurantTable.sectionName == obj.sectionName,
+            )
+            .first()
         )
+        if table is not None:
+            table.availabilityStatus = "Available"
 
-    # Update the status field
-    assignment.currentStatus = update.currentStatus
-
-    # Save the updated row
     db.commit()
-
-    # Refresh the object so it reflects the latest database state
-    db.refresh(assignment)
-
-    # Return the updated assignment
-    return assignment
+    db.refresh(obj)
+    return obj
 
 
 # DELETE /seating-assignments/{assignment_id}
-# Deletes a seating assignment by ID
 @router.delete("/{assignment_id}")
-def delete_seating_assignment(
-    assignment_id: int,
-    db: Session = Depends(get_db)
-) -> dict[str, str]:
-    # Find the seating assignment by ID
-    assignment = (
+def delete_seating_assignment(assignment_id: int, db: Session = Depends(get_db)):
+    obj = (
         db.query(SeatingAssignment)
         .filter(SeatingAssignment.assignmentID == assignment_id)
         .first()
     )
-
-    # If it does not exist, return an HTTP 404 error
-    if assignment is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Seating assignment not found"
-        )
-
-    # Delete the seating assignment
-    db.delete(assignment)
-
-    # Commit the delete operation
+    if obj is None:
+        raise HTTPException(status_code=404, detail="Seating assignment not found.")
+    db.delete(obj)
     db.commit()
-
-    # Return a simple success message
     return {"message": "Seating assignment successfully deleted"}

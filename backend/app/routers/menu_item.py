@@ -2,12 +2,17 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from typing import List
 from app.models.menu_item import MenuItem
 from app.schemas.menu_item import MenuItemCreate, MenuItemResponse, MenuItemUpdate
 
 # Create a router object to group all menu item endpoints together
 router = APIRouter()
 
+# GET /menu-items/   — list all menu items
+@router.get("/", response_model=List[MenuItemResponse])
+def list_menu_items(db: Session = Depends(get_db)):
+    return db.query(MenuItem).order_by(MenuItem.menuItemID).all()
 
 # POST /menu-items/
 # Creates a new menu item
